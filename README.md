@@ -1,1 +1,3 @@
 # LCNC
+
+React + Vite project.
