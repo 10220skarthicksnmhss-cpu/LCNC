@@ -11,9 +11,13 @@ async function bootstrap() {
   await prisma.$connect();
   app.log.info('[DB] PostgreSQL 18 connected');
 
-  // Verify Redis connection
-  await redis.connect();
-  app.log.info('[Redis] Connected');
+  // Redis is used for queues/caching — optional for core API
+  try {
+    await redis.connect();
+    app.log.info('[Redis] Connected');
+  } catch {
+    app.log.warn('[Redis] Not available — BullMQ queues and caching disabled. Install Redis to enable them.');
+  }
 
   await app.listen({ port: env.PORT, host: env.HOST });
   app.log.info(`🚀 Thali API running at http://${env.HOST}:${env.PORT}`);
