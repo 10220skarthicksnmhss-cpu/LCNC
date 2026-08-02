@@ -28,23 +28,23 @@ export class OrderService {
       if (exists) continue;
 
       const price = Number(sub.meal.currentPrice);
-      await prisma.order.create({
+      const order = await prisma.order.create({
         data: {
-          userId:         sub.userId,
-          subscriptionId: sub.id,
-          mealId:         sub.mealId,
-          deliveryDate:   tomorrow,
-          deliveryTime:   sub.deliveryTime,
+          userId:           sub.userId,
+          subscriptionId:   sub.id,
+          mealId:           sub.mealId,
+          deliveryDate:     tomorrow,
+          deliveryTime:     sub.deliveryTime,
           deliveryAddressId: sub.addressId,
-          status:         OrderStatus.PENDING,
-          basePrice:      price,
-          finalPrice:     price,
-          decisionTrail:  'Original order pending.',
+          status:           OrderStatus.PENDING,
+          basePrice:        price,
+          finalPrice:       price,
+          decisionTrail:    'Original order pending.',
         },
       });
 
       await prisma.orderStatusHistory.create({
-        data: { orderId: (await prisma.order.findFirst({ where: { subscriptionId: sub.id, deliveryDate: tomorrow } }))!.id, status: OrderStatus.PENDING },
+        data: { orderId: order.id, status: OrderStatus.PENDING },
       });
 
       created++;

@@ -418,12 +418,13 @@ model Order {
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
-  user           User              @relation(fields: [userId], references: [id])
-  subscription   Subscription?     @relation(fields: [subscriptionId], references: [id])
-  meal           Meal              @relation(fields: [mealId], references: [id])
-  alert          PriceAlert?       @relation(fields: [alertId], references: [id])
-  deliveryAddress UserAddress?     @relation(fields: [deliveryAddressId], references: [id])
-  statusHistory  OrderStatusHistory[]
+  user            User               @relation(fields: [userId], references: [id])
+  subscription    Subscription?      @relation(fields: [subscriptionId], references: [id])
+  meal            Meal               @relation(fields: [mealId], references: [id])
+  alert           PriceAlert?        @relation(fields: [alertId], references: [id])
+  deliveryAddress UserAddress?       @relation(fields: [deliveryAddressId], references: [id])
+  statusHistory   OrderStatusHistory[]
+  notifications   Notification[]
 
   @@index([userId])
   @@index([deliveryDate(sort: Desc)])
@@ -461,6 +462,7 @@ model Notification {
 
   user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   alert PriceAlert? @relation(fields: [alertId], references: [id])
+  order Order?      @relation(fields: [orderId], references: [id])
 
   @@map("notifications")
 }

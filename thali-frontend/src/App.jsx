@@ -9,11 +9,12 @@ import AISuggestScreen from './screens/AISuggestScreen';
 import BottomNav from './components/layout/BottomNav';
 
 export default function App() {
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('onboarding_done'));
   const [activeTab, setActiveTab] = useState('home');
   const [modalScreen, setModalScreen] = useState(null); // 'ai-suggest' | null
 
   const handleOnboardingComplete = () => {
+    localStorage.setItem('onboarding_done', '1');
     setShowOnboarding(false);
     setActiveTab('home');
   };
