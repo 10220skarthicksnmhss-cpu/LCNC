@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { C, F } from '../tokens';
+import { users as usersApi } from '../api/client';
 
 function Section({ title, children }) {
   return (
@@ -18,8 +19,7 @@ function Row({ label, value, action, last }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '14px 20px',
-      borderBottom: last ? 'none' : `1px solid ${C.border}`,
+      padding: '14px 20px', borderBottom: last ? 'none' : `1px solid ${C.border}`,
     }}>
       <span style={{ fontFamily: F.body, fontSize: 14, color: C.cream }}>{label}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -46,12 +46,49 @@ function Toggle({ value, onChange }) {
   );
 }
 
-export default function ProfileScreen({ onEditPreferences }) {
-  const [notifs, setNotifs] = useState({ Push: true, SMS: false, Email: true, WhatsApp: true });
-  const [budget, setBudget] = useState(150);
+export default function ProfileScreen({ user: propUser, onEditPreferences, onSignOut }) {
+  const [profile, setProfile]   = useState(propUser);
+  const [notifs, setNotifs]     = useState({ Push: true, SMS: false, Email: true, WhatsApp: false });
+  const [budget, setBudget]     = useState(150);
   const [threshold, setThreshold] = useState(20);
+  const [saving, setSaving]     = useState(false);
+
+  useEffect(() => {
+    usersApi.me().then(res => {
+      const data = res.data;
+      setProfile(data);
+      if (data.preferences) {
+        setNotifs({
+          Push:      data.preferences.notifPush ?? true,
+          SMS:       data.preferences.notifSms ?? false,
+          Email:     data.preferences.notifEmail ?? true,
+          WhatsApp:  data.preferences.notifWhatsapp ?? false,
+        });
+        setBudget(data.preferences.dailyBudget ?? 150);
+        setThreshold(data.preferences.alertThreshold ?? 20);
+      }
+    }).catch(console.error);
+  }, []);
+
+  const savePrefs = async (patch) => {
+    setSaving(true);
+    try {
+      const res = await usersApi.updateMe({ preferences: patch });
+      setProfile(res.data);
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
+  };
+
+  const toggleNotif = (key, apiKey) => {
+    const next = !notifs[key];
+    setNotifs(p => ({ ...p, [key]: next }));
+    savePrefs({ [apiKey]: next });
+  };
 
   const linkStyle = { fontFamily: F.body, fontSize: 13, color: C.saffron, background: 'none', border: 'none', cursor: 'pointer' };
+  const name  = profile?.name  ?? '—';
+  const email = profile?.email ?? '—';
+  const initial = name[0]?.toUpperCase() ?? '?';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', background: C.bg }}>
@@ -60,37 +97,29 @@ export default function ProfileScreen({ onEditPreferences }) {
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 88 }}>
-        {/* Avatar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px 20px 20px', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px 20px', borderBottom: `1px solid ${C.border}` }}>
           <div style={{
             width: 60, height: 60, borderRadius: '50%',
             background: 'rgba(232,121,58,0.12)', border: '1px solid rgba(232,121,58,0.25)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
-            <span style={{ fontFamily: F.display, fontStyle: 'italic', fontWeight: 700, fontSize: 24, color: C.saffron }}>K</span>
+            <span style={{ fontFamily: F.display, fontStyle: 'italic', fontWeight: 700, fontSize: 24, color: C.saffron }}>{initial}</span>
           </div>
           <div>
-            <p style={{ fontFamily: F.body, fontWeight: 600, fontSize: 17, color: C.cream, marginBottom: 2 }}>Karthick</p>
-            <p style={{ fontFamily: F.body, fontSize: 13, color: C.muted }}>10220s.karthicksnmhss@gmail.com</p>
+            <p style={{ fontFamily: F.body, fontWeight: 600, fontSize: 17, color: C.cream, marginBottom: 2 }}>{name}</p>
+            <p style={{ fontFamily: F.body, fontSize: 13, color: C.muted }}>{email}</p>
           </div>
         </div>
 
-        <Section title="Payment">
-          <Row label="Card" value="•••• 4242" action={<button style={linkStyle}>Change</button>} last />
-        </Section>
-
-        <Section title="Delivery">
-          <Row
-            label="Block 4, Sector 12, Anna Nagar"
-            action={<button style={linkStyle}>Edit</button>}
-            last
-          />
-        </Section>
-
         <Section title="Notifications">
-          {['Push', 'SMS', 'Email', 'WhatsApp'].map((n, i, arr) => (
-            <Row key={n} label={n}
-              action={<Toggle value={notifs[n]} onChange={() => setNotifs(p => ({ ...p, [n]: !p[n] }))} />}
+          {[
+            { label: 'Push', key: 'Push', apiKey: 'notifPush' },
+            { label: 'SMS', key: 'SMS', apiKey: 'notifSms' },
+            { label: 'Email', key: 'Email', apiKey: 'notifEmail' },
+            { label: 'WhatsApp', key: 'WhatsApp', apiKey: 'notifWhatsapp' },
+          ].map(({ label, key, apiKey }, i, arr) => (
+            <Row key={key} label={label}
+              action={<Toggle value={notifs[key]} onChange={() => toggleNotif(key, apiKey)} />}
               last={i === arr.length - 1}
             />
           ))}
@@ -102,25 +131,35 @@ export default function ProfileScreen({ onEditPreferences }) {
               <span style={{ fontFamily: F.body, fontSize: 14, color: C.muted }}>Daily budget</span>
               <span style={{ fontFamily: F.mono, fontSize: 14, fontWeight: 600, color: C.saffron }}>₹{budget}</span>
             </div>
-            <input type="range" min={80} max={400} step={10} value={budget} onChange={e => setBudget(Number(e.target.value))} />
+            <input type="range" min={80} max={400} step={10} value={budget}
+              onChange={e => setBudget(Number(e.target.value))}
+              onMouseUp={e => savePrefs({ dailyBudget: Number(e.target.value) })}
+              onTouchEnd={e => savePrefs({ dailyBudget: Number(e.target.value) })}
+            />
           </div>
           <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
               <span style={{ fontFamily: F.body, fontSize: 14, color: C.muted }}>Alert threshold</span>
               <span style={{ fontFamily: F.mono, fontSize: 14, fontWeight: 600, color: C.saffron }}>+{threshold}%</span>
             </div>
-            <input type="range" min={5} max={50} step={5} value={threshold} onChange={e => setThreshold(Number(e.target.value))} />
+            <input type="range" min={5} max={50} step={5} value={threshold}
+              onChange={e => setThreshold(Number(e.target.value))}
+              onMouseUp={e => savePrefs({ alertThreshold: Number(e.target.value) })}
+              onTouchEnd={e => savePrefs({ alertThreshold: Number(e.target.value) })}
+            />
           </div>
           <Row label="Edit all preferences" action={<button onClick={onEditPreferences} style={linkStyle}>→</button>} last />
         </Section>
 
         <div style={{ padding: '16px 20px' }}>
-          <button style={{
-            width: '100%', padding: '14px 0',
-            fontFamily: F.body, fontSize: 15, color: C.danger,
-            background: 'rgba(192,57,43,0.06)', border: '1px solid rgba(192,57,43,0.15)',
-            borderRadius: 14, cursor: 'pointer',
-          }}>Sign out</button>
+          <button
+            onClick={onSignOut}
+            style={{
+              width: '100%', padding: '14px 0',
+              fontFamily: F.body, fontSize: 15, color: C.danger,
+              background: 'rgba(192,57,43,0.06)', border: '1px solid rgba(192,57,43,0.15)',
+              borderRadius: 14, cursor: 'pointer',
+            }}>Sign out</button>
         </div>
       </div>
     </div>

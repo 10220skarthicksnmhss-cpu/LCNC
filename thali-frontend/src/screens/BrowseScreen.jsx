@@ -1,32 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { C, F } from '../tokens';
 import MealCard from '../components/meals/MealCard';
 import MealDrawer from '../components/meals/MealDrawer';
-import { meals } from '../data/mockData';
+import { meals as mealsApi } from '../api/client';
 
 const FILTERS = ['All', 'Veg', 'Under ₹150', 'South Indian', 'Non-veg', 'Vegan'];
 
 export default function BrowseScreen() {
-  const [search, setSearch] = useState('');
+  const [search, setSearch]           = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected]       = useState(null);
+  const [mealsList, setMealsList]     = useState([]);
+  const [loading, setLoading]         = useState(true);
 
-  const filtered = meals.filter(m => {
-    const q = search.toLowerCase();
-    const s = !q || m.name.toLowerCase().includes(q) || m.cuisine.toLowerCase().includes(q);
-    const f =
-      activeFilter === 'All' ? true :
-      activeFilter === 'Veg' ? m.type === 'veg' :
-      activeFilter === 'Under ₹150' ? m.price < 150 :
-      activeFilter === 'South Indian' ? m.tag === 'South Indian' :
-      activeFilter === 'Non-veg' ? m.type === 'non-veg' :
-      activeFilter === 'Vegan' ? m.type === 'vegan' : true;
-    return s && f;
-  });
+  const fetchMeals = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = { search: search || undefined, filter: activeFilter !== 'All' ? activeFilter : undefined };
+      const res = await mealsApi.list(params);
+      setMealsList(res.data ?? []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, activeFilter]);
+
+  useEffect(() => {
+    const t = setTimeout(fetchMeals, search ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [fetchMeals]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', background: C.bg }}>
-      {/* Header */}
       <header style={{
         padding: '56px 20px 14px',
         position: 'sticky', top: 0, zIndex: 30,
@@ -35,7 +41,6 @@ export default function BrowseScreen() {
       }}>
         <h1 style={{ fontFamily: F.display, fontStyle: 'italic', fontSize: 26, fontWeight: 700, color: C.cream, marginBottom: 14 }}>Browse</h1>
 
-        {/* Search */}
         <div style={{ position: 'relative', marginBottom: 12 }}>
           <svg style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }}
             width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth={2}>
@@ -47,13 +52,11 @@ export default function BrowseScreen() {
               width: '100%', background: 'rgba(255,255,255,0.05)',
               border: `1px solid ${C.border}`, borderRadius: 12,
               padding: '11px 14px 11px 38px',
-              fontFamily: F.body, fontSize: 14, color: C.cream,
-              outline: 'none',
+              fontFamily: F.body, fontSize: 14, color: C.cream, outline: 'none',
             }}
           />
         </div>
 
-        {/* Filter chips */}
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
           {FILTERS.map(f => {
             const on = f === activeFilter;
@@ -71,15 +74,18 @@ export default function BrowseScreen() {
         </div>
       </header>
 
-      {/* Grid */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 88px' }}>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40, color: C.muted, fontFamily: F.body, fontSize: 14 }}>
+            Loading…
+          </div>
+        ) : mealsList.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, color: C.muted }}>
             <p style={{ fontFamily: F.body, fontSize: 14 }}>No meals found</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {filtered.map(m => <MealCard key={m.id} meal={m} onClick={setSelected} />)}
+            {mealsList.map(m => <MealCard key={m.id} meal={m} onClick={setSelected} />)}
           </div>
         )}
       </div>

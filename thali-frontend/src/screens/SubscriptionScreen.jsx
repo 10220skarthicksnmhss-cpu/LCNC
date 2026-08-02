@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { C, F } from '../tokens';
 import SubscriptionCard from '../components/subscription/SubscriptionCard';
-import { subscriptions as init } from '../data/mockData';
+import { subscriptions as subsApi } from '../api/client';
 
 function CancelModal({ sub, onConfirm, onDismiss }) {
   return (
@@ -48,8 +48,31 @@ function CancelModal({ sub, onConfirm, onDismiss }) {
 }
 
 export default function SubscriptionScreen() {
-  const [subs, setSubs] = useState(init);
+  const [subs, setSubs]               = useState([]);
+  const [loading, setLoading]         = useState(true);
   const [cancelTarget, setCancelTarget] = useState(null);
+
+  useEffect(() => {
+    subsApi.list()
+      .then(res => setSubs(res.data ?? []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleUpdate = async (id, patch) => {
+    try {
+      const res = await subsApi.update(id, patch);
+      setSubs(p => p.map(s => s.id === id ? { ...s, ...res.data } : s));
+    } catch (e) { console.error(e); }
+  };
+
+  const handleCancel = async (sub) => {
+    try {
+      await subsApi.cancel(sub.id);
+      setSubs(p => p.filter(s => s.id !== sub.id));
+      setCancelTarget(null);
+    } catch (e) { console.error(e); }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', background: C.bg }}>
@@ -61,7 +84,9 @@ export default function SubscriptionScreen() {
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 88px' }}>
-        {subs.length === 0 ? (
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 80, color: C.muted, fontFamily: F.body, fontSize: 14 }}>Loading…</div>
+        ) : subs.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 80, color: C.muted }}>
             <p style={{ fontFamily: F.body, fontSize: 15 }}>No subscriptions yet</p>
           </div>
@@ -69,7 +94,7 @@ export default function SubscriptionScreen() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {subs.map(s => (
               <SubscriptionCard key={s.id} sub={s}
-                onUpdate={u => setSubs(p => p.map(x => x.id === u.id ? u : x))}
+                onUpdate={patch => handleUpdate(s.id, patch)}
                 onCancel={setCancelTarget}
               />
             ))}
@@ -93,7 +118,7 @@ export default function SubscriptionScreen() {
       {cancelTarget && (
         <CancelModal
           sub={cancelTarget}
-          onConfirm={s => { setSubs(p => p.filter(x => x.id !== s.id)); setCancelTarget(null); }}
+          onConfirm={handleCancel}
           onDismiss={() => setCancelTarget(null)}
         />
       )}

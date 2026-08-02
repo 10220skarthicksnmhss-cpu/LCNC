@@ -1,60 +1,30 @@
-// src/schedulers/cron.scheduler.ts
+﻿// src/schedulers/cron.scheduler.ts
 import cron from 'node-cron';
-import { Queue } from 'bullmq';
-import { bullMQRedisOptions } from '../config/redis';
-import { QUEUE } from '../workers/index';
+import { alertService } from '../modules/alerts/alert.service';
+import { orderService } from '../modules/orders/order.service';
 
-const spikeQueue    = new Queue(QUEUE.SPIKE_DETECTION, { connection: bullMQRedisOptions.connection });
-const dailyQueue    = new Queue(QUEUE.DAILY_ORDERS,    { connection: bullMQRedisOptions.connection });
+export function startCronScheduler(): void {
+  // Detect price spikes every day at 06:00 IST
+  cron.schedule('0 6 * * *', async () => {
+    console.log('[Cron] detectSpikesForToday — starting');
+    try {
+      const count = await alertService.detectSpikesForToday();
+      console.log(`[Cron] detectSpikesForToday — ${count} alert(s) created`);
+    } catch (err) {
+      console.error('[Cron] detectSpikesForToday failed:', (err as Error).message);
+    }
+  }, { timezone: 'Asia/Kolkata' });
 
-export function startCronScheduler() {
-  // ── Cron 1: Fetch and update ingredient market prices (6:00 AM IST) ──
-  // NOTE: In production, replace with actual market API call
-  cron.schedule('30 0 * * *', () => {
-    console.log('[Cron] 6:00 AM IST — Trigger ingredient price fetch (implement market API here)');
-  });
+  // Pre-create tomorrow orders every day at 23:00 IST
+  cron.schedule('0 23 * * *', async () => {
+    console.log('[Cron] createDailyOrders — starting');
+    try {
+      const count = await orderService.createDailyOrders();
+      console.log(`[Cron] createDailyOrders — ${count} order(s) created`);
+    } catch (err) {
+      console.error('[Cron] createDailyOrders failed:', (err as Error).message);
+    }
+  }, { timezone: 'Asia/Kolkata' });
 
-  // ── Cron 2: Detect price spikes across all subscriptions (7:00 AM IST) ──
-  cron.schedule('30 1 * * *', async () => {
-    console.log('[Cron] 7:00 AM IST — Detecting spikes');
-    await spikeQueue.add('daily-spike-check', {}, { attempts: 3 });
-  });
-
-  // ── Cron 3: Pre-create tomorrow's orders (11:00 PM IST) ─────────────
-  cron.schedule('30 17 * * *', async () => {
-    console.log('[Cron] 11:00 PM IST — Pre-creating tomorrow\'s orders');
-    await dailyQueue.add('create-daily-orders', {}, { attempts: 3 });
-  });
-
-  // ── Cron 4: Cleanup expired refresh tokens (3:00 AM IST) ────────────
-  cron.schedule('30 21 * * *', async () => {
-    const { prisma } = await import('../config/db');
-    const deleted = await prisma.refreshToken.deleteMany({
-      where: { expiresAt: { lt: new Date() } },
-    });
-    console.log(`[Cron] 3:00 AM IST — Cleaned up ${deleted.count} expired refresh tokens`);
-  });
-
-  // ── Cron 5: Cleanup old notifications > 90 days (4:00 AM IST) ───────
-  cron.schedule('30 22 * * 0', async () => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 90);
-    const { prisma } = await import('../config/db');
-    const deleted = await prisma.notification.deleteMany({
-      where: { createdAt: { lt: cutoff } },
-    });
-    console.log(`[Cron] Weekly cleanup — Removed ${deleted.count} old notifications`);
-  });
-
-  // ── Cron 6: Snapshot all meal prices to history (midnight IST) ───────
-  cron.schedule('30 18 * * *', async () => {
-    const { prisma } = await import('../config/db');
-    const meals = await prisma.meal.findMany({ where: { isAvailable: true }, select: { id: true, currentPrice: true } });
-    await prisma.mealPriceHistory.createMany({
-      data: meals.map(m => ({ mealId: m.id, price: m.currentPrice })),
-    });
-    console.log(`[Cron] Midnight IST — Snapshotted ${meals.length} meal prices`);
-  });
-
-  console.log('✅ Cron scheduler started (6 jobs registered)');
+  console.log('[Cron] Scheduler started (spikes: 6AM IST, orders: 11PM IST)');
 }

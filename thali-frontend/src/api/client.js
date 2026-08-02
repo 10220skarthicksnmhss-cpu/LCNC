@@ -1,11 +1,17 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/v1';
 
 let _accessToken = null;
+let _refreshFn   = null;   // set by App on mount: async () => boolean
+let _on401       = null;   // called when refresh fails
 
-function setToken(token) { _accessToken = token; }
-function clearToken() { _accessToken = null; }
+export function setToken(token)         { _accessToken = token; }
+export function clearToken()            { _accessToken = null; }
+export function setRefreshFn(fn)        { _refreshFn = fn; }
+export function onUnauthorized(handler) { _on401 = handler; }
 
-async function request(method, path, body) {
+let _refreshing = null;
+
+async function request(method, path, body, _isRetry = false) {
   const headers = { 'Content-Type': 'application/json' };
   if (_accessToken) headers['Authorization'] = `Bearer ${_accessToken}`;
 
@@ -14,6 +20,14 @@ async function request(method, path, body) {
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+
+  if (res.status === 401 && !_isRetry && _refreshFn) {
+    if (!_refreshing) _refreshing = _refreshFn().finally(() => { _refreshing = null; });
+    const ok = await _refreshing;
+    if (ok) return request(method, path, body, true);
+    if (_on401) _on401();
+    throw Object.assign(new Error('Session expired'), { status: 401 });
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
@@ -30,10 +44,10 @@ const del  = (path)        => request('DELETE', path);
 
 // ── Auth ──────────────────────────────────────────────────────
 export const auth = {
-  register: (payload) => post('/auth/register', payload),
-  login:    (email, password) => post('/auth/login', { email, password }),
-  refresh:  (refreshToken) => post('/auth/refresh', { refreshToken }),
-  logout:   (refreshToken) => post('/auth/logout', { refreshToken }),
+  register: (payload)              => post('/auth/register', payload),
+  login:    (email, password)      => post('/auth/login', { email, password }),
+  refresh:  (refreshToken)         => post('/auth/refresh', { refreshToken }),
+  logout:   (refreshToken)         => post('/auth/logout', { refreshToken }),
 };
 
 // ── Users ─────────────────────────────────────────────────────
@@ -69,7 +83,7 @@ export const subscriptions = {
 // ── Alerts ────────────────────────────────────────────────────
 export const alerts = {
   active:  () => get('/alerts/active'),
-  respond: (id, action, mealId) => post(`/alerts/${id}/respond`, { action, mealId }),
+  respond: (id, action, selectedMealId) => post(`/alerts/${id}/respond`, { action, ...(selectedMealId && { selectedMealId }) }),
 };
 
 // ── Orders ────────────────────────────────────────────────────
@@ -83,4 +97,4 @@ export const orders = {
   detail: (id) => get(`/orders/${id}`),
 };
 
-export { setToken, clearToken };
+// setToken / clearToken are named exports at the top of this file
